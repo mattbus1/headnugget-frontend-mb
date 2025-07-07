@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { documentService } from '../services/documentService';
-import type { UploadProgress, UploadResponse } from '../types/document.types';
+import type { UploadProgress } from '../types/document.types';
 
 interface UseDocumentUploadReturn {
   uploads: UploadProgress[];
@@ -64,28 +64,56 @@ export const useDocumentUpload = (): UseDocumentUploadReturn => {
 
           updateUpload(uploadId, { progress: 50 });
 
-          // Perform the actual upload
-          const result: UploadResponse = await documentService.uploadDocument(file);
+          // Perform the actual upload to PolicyStack backend
+          const result = await documentService.uploadDocument(file);
           
-          updateUpload(uploadId, { progress: 75 });
+          updateUpload(uploadId, { 
+            progress: 75,
+            documentId: result.id,
+            entityId: result.entity_id
+          });
 
-          // If there's a job ID, the file is being processed (OCR, etc.)
-          if (result.jobId) {
+          // PolicyStack processes documents immediately, so check status
+          if (result.status === 'processing' || result.status === 'pending') {
             updateUpload(uploadId, { 
               status: 'processing',
               progress: 90
             });
 
-            // Poll for job completion (simplified - you might want to implement this differently)
-            // In a real implementation, you'd poll the job status endpoint
-            setTimeout(() => {
-              updateUpload(uploadId, { 
-                status: 'completed',
-                progress: 100
-              });
-            }, 3000);
+            // Poll for processing completion
+            const pollStatus = async () => {
+              try {
+                const statusResponse = await documentService.getDocumentStatus(result.id);
+                
+                if (statusResponse.status === 'completed') {
+                  updateUpload(uploadId, { 
+                    status: 'completed',
+                    progress: 100
+                  });
+                } else if (statusResponse.status === 'failed') {
+                  updateUpload(uploadId, { 
+                    status: 'error',
+                    error: statusResponse.error_message || 'Processing failed',
+                    progress: 0
+                  });
+                } else {
+                  // Still processing, check again in 2 seconds
+                  setTimeout(pollStatus, 2000);
+                }
+              } catch (error) {
+                console.error('Error polling document status:', error);
+                updateUpload(uploadId, { 
+                  status: 'error',
+                  error: 'Failed to check processing status',
+                  progress: 0
+                });
+              }
+            };
+            
+            // Start polling after 1 second
+            setTimeout(pollStatus, 1000);
           } else {
-            // Upload completed immediately
+            // Upload and processing completed immediately
             updateUpload(uploadId, { 
               status: 'completed',
               progress: 100

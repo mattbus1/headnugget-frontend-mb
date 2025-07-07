@@ -1,12 +1,27 @@
 export interface Document {
   id: string;
-  name: string;
-  size: number;
-  type: string;
-  uploadDate: string;
-  modifiedDate: string;
-  version: string;
-  status: 'active' | 'processing' | 'error';
+  filename: string;
+  file_type: string;
+  file_size: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'active';
+  created_at: string;
+  organization_id: string;
+  entity_id?: string;
+  entity_name?: string;
+  entity_type?: string;
+  error_message?: string;
+  processing_started_at?: string;
+  processing_completed_at?: string;
+  current_stage?: string;
+  stage_history?: ProcessingStageRecord[];
+  processing_duration_seconds?: number;
+  // Legacy fields for backward compatibility
+  name?: string;
+  size?: number;
+  type?: string;
+  uploadDate?: string;
+  modifiedDate?: string;
+  version?: string;
   tags?: string[];
   category?: string;
   url?: string;
@@ -18,6 +33,8 @@ export interface UploadProgress {
   progress: number;
   status: 'uploading' | 'processing' | 'completed' | 'error';
   error?: string;
+  documentId?: string;
+  entityId?: string;
 }
 
 export interface DocumentUploadProps {
@@ -53,9 +70,16 @@ export interface ApiResponse<T> {
 }
 
 export interface UploadResponse {
-  documentId: string;
-  jobId?: string; // For Celery background processing
-  status: 'uploaded' | 'processing';
+  id: string;
+  filename: string;
+  file_type: string;
+  status: string;
+  created_at: string;
+  file_size: number;
+  organization_id: string;
+  entity_id?: string;
+  entity_name?: string;
+  entity_type?: string;
 }
 
 export interface DocumentListResponse {
@@ -63,6 +87,35 @@ export interface DocumentListResponse {
   total: number;
   page: number;
   limit: number;
+}
+
+// PolicyStack backend types
+export interface ProcessingStageRecord {
+  stage: string;
+  started_at: string;
+  completed_at?: string;
+  status: string;
+  duration_seconds?: number;
+  error_message?: string;
+}
+
+export interface DocumentStatusResponse {
+  document_id: string;
+  filename: string;
+  status: string;
+  current_stage?: string;
+  stage_history: ProcessingStageRecord[];
+  processing_duration_seconds?: number;
+  is_stuck: boolean;
+  stuck_stage?: string;
+  error_message?: string;
+  processing_started_at?: string;
+  processing_completed_at?: string;
+}
+
+export interface DocumentDataResponse {
+  extracted_text?: string;
+  processing_metadata: Record<string, any>;
 }
 
 // File validation types

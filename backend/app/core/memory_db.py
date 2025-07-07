@@ -184,8 +184,11 @@ class MemoryDB:
         doc_id = str(uuid.uuid4())
         doc_data["id"] = doc_id
         doc_data["created_at"] = datetime.utcnow()
-        doc_data["status"] = DocumentStatus.PENDING
-        doc_data["stage_history"] = []
+        # Only set status to PENDING if not already specified
+        if "status" not in doc_data:
+            doc_data["status"] = DocumentStatus.PENDING
+        if "stage_history" not in doc_data:
+            doc_data["stage_history"] = []
         self.documents[doc_id] = doc_data
         return doc_data
     

@@ -96,14 +96,18 @@ const DocumentGrid: React.FC<DocumentGridProps> = ({
           <div className="p-4 pb-3">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center space-x-3 flex-1 min-w-0">
-                {getFileIcon(document.type)}
+                {getFileIcon(document.file_type || document.type || 'unknown')}
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-medium text-gray-900 truncate" title={document.name}>
-                    {document.name}
+                  <h3 className="text-sm font-medium text-gray-900 truncate" title={document.filename || document.name}>
+                    {document.filename || document.name}
                   </h3>
                   <div className="flex items-center space-x-2 mt-1">
                     {getStatusBadge(document.status)}
-                    <span className="text-xs text-gray-500">v{document.version}</span>
+                    {document.entity_name && (
+                      <span className="text-xs text-amber-600" style={{ color: '#8B7355' }}>
+                        {document.entity_name}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -137,11 +141,11 @@ const DocumentGrid: React.FC<DocumentGridProps> = ({
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-1">
                   <HardDrive className="w-3 h-3" />
-                  <span>{formatFileSize(document.size)}</span>
+                  <span>{formatFileSize(document.file_size || document.size || 0)}</span>
                 </div>
                 <div className="flex items-center space-x-1">
                   <Calendar className="w-3 h-3" />
-                  <span>{formatDate(document.modifiedDate)}</span>
+                  <span>{formatDate(document.created_at || document.uploadDate || document.modifiedDate || '')}</span>
                 </div>
               </div>
               
@@ -182,10 +186,11 @@ const DocumentGrid: React.FC<DocumentGridProps> = ({
           {/* Document Footer */}
           <div className="px-4 py-2 bg-gray-50 border-t border-gray-100">
             <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>Modified: {formatDate(document.modifiedDate)}</span>
+              <span>Uploaded: {formatDate(document.created_at || document.uploadDate || document.modifiedDate || '')}</span>
               <span className="text-amber-600" style={{ color: '#8B7355' }}>
-                {document.status === 'active' ? 'Ready' : 
-                 document.status === 'processing' ? 'Processing...' : 'Error'}
+                {document.status === 'completed' || document.status === 'active' ? 'Ready' : 
+                 document.status === 'processing' ? 'Processing...' :
+                 document.status === 'pending' ? 'Pending...' : 'Error'}
               </span>
             </div>
           </div>

@@ -10,6 +10,7 @@ import type { Document, DocumentLibraryProps } from '../../types/document.types'
 const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ initialDocuments = [] }) => {
   const [documents, setDocuments] = useState<Document[]>(initialDocuments);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showUpload, setShowUpload] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -17,20 +18,47 @@ const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ initialDocuments = []
   
   const { uploads, uploadFiles, cancelUpload } = useDocumentUpload();
 
-  // Load documents on component mount (using mock data for now)
+  // Load documents from PolicyStack backend
   useEffect(() => {
     const loadDocuments = async () => {
       setLoading(true);
+      setError(null);
       try {
-        // TODO: Replace with actual API call when backend is ready
-        // const response = await documentService.getDocuments();
-        // setDocuments(response.data.documents);
+        const response = await documentService.getDocuments(1, 50);
         
-        // Using mock data for now
-        const mockDocuments = documentService.getMockDocuments();
-        setDocuments(mockDocuments);
+        // Transform backend response to frontend format
+        const transformedDocuments: Document[] = response.map(doc => ({
+          id: doc.id,
+          filename: doc.filename,
+          file_type: doc.file_type,
+          file_size: doc.file_size,
+          status: doc.status,
+          created_at: doc.created_at,
+          organization_id: doc.organization_id,
+          entity_id: doc.entity_id,
+          entity_name: doc.entity_name,
+          entity_type: doc.entity_type,
+          error_message: doc.error_message,
+          processing_started_at: doc.processing_started_at,
+          processing_completed_at: doc.processing_completed_at,
+          current_stage: doc.current_stage,
+          stage_history: doc.stage_history,
+          processing_duration_seconds: doc.processing_duration_seconds,
+          // Legacy fields for compatibility
+          name: doc.filename,
+          size: doc.file_size,
+          type: doc.file_type,
+          uploadDate: doc.created_at?.split('T')[0] || '',
+          modifiedDate: doc.created_at?.split('T')[0] || '',
+          version: 'v1.0',
+          category: doc.entity_name || 'Uploads'
+        }));
+        
+        setDocuments(transformedDocuments);
       } catch (error) {
         console.error('Failed to load documents:', error);
+        setError(error instanceof Error ? error.message : 'Failed to load documents');
+        setDocuments([]);
       } finally {
         setLoading(false);
       }
@@ -39,68 +67,79 @@ const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ initialDocuments = []
     loadDocuments();
   }, []);
 
-  // Handle file upload
+  // Handle file upload using PolicyStack backend
   const handleUpload = async (files: File[]) => {
     try {
+      setError(null);
       await uploadFiles(files);
       
-      // Refresh documents after upload (in a real app, you might want to add the new documents directly)
-      // For now, we'll just simulate adding new documents
-      const newDocuments = files.map((file, index) => ({
-        id: `temp_${Date.now()}_${index}`,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        uploadDate: new Date().toISOString().split('T')[0],
-        modifiedDate: new Date().toISOString().split('T')[0],
-        version: 'v1.0',
-        status: 'processing' as const,
-        category: 'Uploads'
-      }));
-
-      // Add new documents to the list
-      setDocuments(prev => [...newDocuments, ...prev]);
+      // Refresh documents list after upload
+      const response = await documentService.getDocuments(1, 50);
       
-      // Simulate processing completion after 3 seconds
-      setTimeout(() => {
-        setDocuments(prev => 
-          prev.map(doc => 
-            newDocuments.some(newDoc => newDoc.id === doc.id)
-              ? { ...doc, status: 'active' as const }
-              : doc
-          )
-        );
-      }, 3000);
+      // Transform backend response to frontend format
+      const transformedDocuments: Document[] = response.map(doc => ({
+        id: doc.id,
+        filename: doc.filename,
+        file_type: doc.file_type,
+        file_size: doc.file_size,
+        status: doc.status,
+        created_at: doc.created_at,
+        organization_id: doc.organization_id,
+        entity_id: doc.entity_id,
+        entity_name: doc.entity_name,
+        entity_type: doc.entity_type,
+        error_message: doc.error_message,
+        processing_started_at: doc.processing_started_at,
+        processing_completed_at: doc.processing_completed_at,
+        current_stage: doc.current_stage,
+        stage_history: doc.stage_history,
+        processing_duration_seconds: doc.processing_duration_seconds,
+        // Legacy fields for compatibility
+        name: doc.filename,
+        size: doc.file_size,
+        type: doc.file_type,
+        uploadDate: doc.created_at?.split('T')[0] || '',
+        modifiedDate: doc.created_at?.split('T')[0] || '',
+        version: 'v1.0',
+        category: doc.entity_name || 'Uploads'
+      }));
+      
+      setDocuments(transformedDocuments);
       
     } catch (error) {
       console.error('Upload failed:', error);
+      setError(error instanceof Error ? error.message : 'Upload failed');
     }
   };
 
-  // Handle document deletion
+  // Handle document deletion using PolicyStack backend
   const handleDelete = async (id: string) => {
     try {
-      // TODO: Replace with actual API call when backend is ready
-      // await documentService.deleteDocument(id);
-      
+      await documentService.deleteDocument(id);
       setDocuments(prev => prev.filter(doc => doc.id !== id));
     } catch (error) {
       console.error('Failed to delete document:', error);
     }
   };
 
-  // Handle document download
+  // Handle document download using PolicyStack backend
   const handleDownload = async (id: string) => {
     try {
-      // TODO: Replace with actual API call when backend is ready
-      // const blob = await documentService.downloadDocument(id);
-      // const url = URL.createObjectURL(blob);
-      // const a = document.createElement('a');
-      // a.href = url;
-      // a.download = document.name;
-      // a.click();
-      
-      console.log('Download document:', id);
+      const documentToDownload = documents.find(doc => doc.id === id);
+      if (!documentToDownload) {
+        console.error('Document not found');
+        return;
+      }
+
+      const blob = await documentService.downloadDocument(id);
+      const url = URL.createObjectURL(blob);
+      const a = window.document.createElement('a');
+      a.href = url;
+      a.download = documentToDownload.filename || documentToDownload.name || 'document';
+      window.document.body.appendChild(a);
+      a.click();
+      window.document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Failed to download document:', error);
     }
@@ -108,11 +147,14 @@ const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ initialDocuments = []
 
   // Filter documents based on search and category
   const filteredDocuments = documents.filter(doc => {
-    const matchesSearch = doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         doc.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+    const documentName = doc.filename || doc.name || '';
+    const matchesSearch = documentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         doc.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                         doc.entity_name?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesCategory = selectedCategory === 'All Documents' || 
                            doc.category === selectedCategory ||
+                           doc.entity_name === selectedCategory ||
                            doc.status === selectedCategory.toLowerCase();
                            
     return matchesSearch && matchesCategory;
@@ -121,9 +163,9 @@ const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ initialDocuments = []
   // Get document statistics
   const stats = {
     total: documents.length,
-    active: documents.filter(d => d.status === 'active').length,
-    processing: documents.filter(d => d.status === 'processing').length,
-    totalSize: documents.reduce((sum, doc) => sum + doc.size, 0)
+    active: documents.filter(d => d.status === 'completed').length,
+    processing: documents.filter(d => d.status === 'processing' || d.status === 'pending').length,
+    totalSize: documents.reduce((sum, doc) => sum + (doc.file_size || doc.size || 0), 0)
   };
 
   const formatFileSize = (bytes: number) => {
@@ -132,9 +174,10 @@ const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ initialDocuments = []
 
   const categories = [
     'All Documents',
-    ...Array.from(new Set(documents.map(d => d.category).filter(Boolean))),
-    'Active',
-    'Processing'
+    ...Array.from(new Set(documents.map(d => d.entity_name || d.category).filter(Boolean))),
+    'Completed',
+    'Processing',
+    'Failed'
   ];
 
   return (
@@ -205,6 +248,33 @@ const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ initialDocuments = []
         {showUpload && (
           <div className="mb-8">
             <DocumentUpload onUpload={handleUpload} />
+          </div>
+        )}
+
+        {/* Error Display */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+              <div className="ml-auto pl-3">
+                <button
+                  onClick={() => setError(null)}
+                  className="text-red-400 hover:text-red-600"
+                >
+                  <span className="sr-only">Dismiss</span>
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

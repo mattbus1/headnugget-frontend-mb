@@ -1,9 +1,7 @@
+import axios, { AxiosError } from 'axios';
 import { API_BASE_URL, API_ENDPOINTS } from '../constants/api';
 import type {
   Document,
-  ApiResponse,
-  UploadResponse,
-  DocumentListResponse,
   FileValidationResult,
   FileValidationRules
 } from '../types/document.types';
@@ -40,41 +38,53 @@ class DocumentService {
     return files.map(file => this.validateFile(file));
   }
 
-  // API call utilities with Auth0 token ready
-  private async makeRequest<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<ApiResponse<T>> {
+  // API call utilities with JWT token authentication
+  private async makeRequest<T>(endpoint: string, options: any = {}): Promise<T> {
     try {
-      // TODO: Add Auth0 token when authentication is implemented
-      // const token = await getAccessTokenSilently();
-      // headers: { 
-      //   'Authorization': `Bearer ${token}`,
-      //   ...options.headers 
-      // }
-
-      const response = await fetch(`${this.baseURL}${endpoint}`, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const token = localStorage.getItem('auth_token');
+      const headers = {
+        ...options.headers
+      };
+      
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
       }
 
-      const data = await response.json();
-      return data;
-    } catch (error) {
+      const response = await axios({
+        url: `${this.baseURL}${endpoint}`,
+        method: options.method || 'GET',
+        headers,
+        data: options.data,
+        params: options.params,
+        timeout: 30000
+      });
+
+      return response.data;
+    } catch (error: any) {
       console.error('API request failed:', error);
-      throw error;
+      
+      // Handle authentication errors
+      if (error.response?.status === 401) {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_data');
+        window.location.href = '/login';
+      }
+      
+      throw this.handleError(error);
     }
   }
 
-  // Document API methods ready for Connor's FastAPI backend
-  async uploadDocument(file: File): Promise<UploadResponse> {
+  private handleError(error: AxiosError): Error {
+    if (error.response?.data && typeof error.response.data === 'object') {
+      const errorData = error.response.data as any;
+      return new Error(errorData.detail || errorData.message || 'An error occurred');
+    }
+    
+    return new Error(error.message || 'An unexpected error occurred');
+  }
+
+  // Document API methods for PolicyStack FastAPI backend
+  async uploadDocument(file: File, entityId?: string): Promise<any> {
     const validation = this.validateFile(file);
     if (!validation.isValid) {
       throw new Error(validation.error);
@@ -82,27 +92,37 @@ class DocumentService {
 
     const formData = new FormData();
     formData.append('file', file);
+    if (entityId) {
+      formData.append('entity_id', entityId);
+    }
 
     try {
-      const response = await fetch(`${this.baseURL}${API_ENDPOINTS.DOCUMENT_UPLOAD}`, {
-        method: 'POST',
-        // TODO: Add Auth0 token headers when implemented
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status}`);
+      const token = localStorage.getItem('auth_token');
+      const headers: any = {};
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
       }
 
-      const result = await response.json();
-      return result;
-    } catch (error) {
+      const response = await axios.post(
+        `${this.baseURL}${API_ENDPOINTS.DOCUMENT_UPLOAD}`,
+        formData,
+        {
+          headers,
+          timeout: 60000, // 60 seconds for file upload
+          onUploadProgress: (progressEvent) => {
+            // This will be handled by the calling component
+          }
+        }
+      );
+
+      return response.data;
+    } catch (error: any) {
       console.error('Document upload failed:', error);
-      throw error;
+      throw this.handleError(error);
     }
   }
 
-  async uploadMultipleDocuments(files: File[]): Promise<UploadResponse[]> {
+  async uploadMultipleDocuments(files: File[], entityId?: string): Promise<any[]> {
     const validationResults = this.validateMultipleFiles(files);
     const invalidFiles = validationResults.filter(result => !result.isValid);
     
@@ -111,10 +131,10 @@ class DocumentService {
     }
 
     // Upload files sequentially to avoid overwhelming the server
-    const results: UploadResponse[] = [];
+    const results: any[] = [];
     for (const file of files) {
       try {
-        const result = await this.uploadDocument(file);
+        const result = await this.uploadDocument(file, entityId);
         results.push(result);
       } catch (error) {
         console.error(`Failed to upload ${file.name}:`, error);
@@ -125,41 +145,63 @@ class DocumentService {
     return results;
   }
 
-  async getDocuments(page: number = 1, limit: number = 20): Promise<DocumentListResponse> {
-    const response = await this.makeRequest<DocumentListResponse>(
-      `${API_ENDPOINTS.DOCUMENTS}?page=${page}&limit=${limit}`
-    );
-    return response.data;
+  async getDocuments(page: number = 1, limit: number = 20, status?: string, entityId?: string): Promise<any[]> {
+    const params: any = { page, limit };
+    if (status) params.status = status;
+    if (entityId) params.entity_id = entityId;
+
+    const response = await this.makeRequest<any[]>(API_ENDPOINTS.DOCUMENTS, {
+      params
+    });
+    return response;
   }
 
-  async deleteDocument(id: string): Promise<ApiResponse<void>> {
-    return this.makeRequest<void>(API_ENDPOINTS.DOCUMENT_DELETE(id), {
+  async deleteDocument(id: string): Promise<void> {
+    await this.makeRequest<void>(`/api/documents/${id}`, {
       method: 'DELETE'
     });
   }
 
   async downloadDocument(id: string): Promise<Blob> {
     try {
-      const response = await fetch(`${this.baseURL}${API_ENDPOINTS.DOCUMENT_DOWNLOAD(id)}`, {
-        // TODO: Add Auth0 token headers when implemented
-      });
-
-      if (!response.ok) {
-        throw new Error(`Download failed: ${response.status}`);
+      const token = localStorage.getItem('auth_token');
+      const headers: any = {};
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
       }
 
-      return await response.blob();
-    } catch (error) {
+      const response = await axios.get(`${this.baseURL}/api/documents/${id}/download`, {
+        headers,
+        responseType: 'blob'
+      });
+
+      return response.data;
+    } catch (error: any) {
       console.error('Document download failed:', error);
-      throw error;
+      throw this.handleError(error);
     }
   }
 
-  // Celery job status polling for OCR processing
-  async getJobStatus(jobId: string): Promise<ApiResponse<{ status: string; progress?: number; result?: any }>> {
-    return this.makeRequest<{ status: string; progress?: number; result?: any }>(
-      API_ENDPOINTS.JOB_STATUS(jobId)
-    );
+  // Document status polling for processing updates
+  async getDocumentStatus(documentId: string): Promise<any> {
+    return this.makeRequest<any>(`/api/documents/${documentId}/status`);
+  }
+
+  async getDocumentData(documentId: string): Promise<any> {
+    return this.makeRequest<any>(`/api/documents/${documentId}/data`);
+  }
+
+  async reprocessDocument(documentId: string): Promise<any> {
+    return this.makeRequest<any>(`/api/documents/${documentId}/reprocess`, {
+      method: 'POST'
+    });
+  }
+
+  async updateDocumentEntity(documentId: string, entityId?: string): Promise<any> {
+    return this.makeRequest<any>(`/api/documents/${documentId}/entity`, {
+      method: 'PATCH',
+      data: { entity_id: entityId }
+    });
   }
 
   // Mock data for development (remove when backend is ready)
@@ -167,49 +209,79 @@ class DocumentService {
     return [
       {
         id: '1',
+        filename: 'Commercial Property Policy Insurance.pdf',
+        file_type: 'application/pdf',
+        file_size: 2.4 * 1024 * 1024,
+        status: 'completed' as const,
+        created_at: '2024-12-14T10:00:00Z',
+        organization_id: 'demo-org',
+        entity_id: 'entity-1',
+        entity_name: 'Main Office',
+        entity_type: 'location',
+        // Legacy fields for backward compatibility
         name: 'Commercial Property Policy Insurance.pdf',
         size: 2.4 * 1024 * 1024,
         type: 'application/pdf',
         uploadDate: '2024-12-14',
         modifiedDate: '2024-12-14',
         version: 'v1.0',
-        status: 'active',
         tags: ['Policy', 'Property'],
         category: 'Insurance'
       },
       {
         id: '2',
+        filename: 'Broker Proposal Comparison.xlsx',
+        file_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        file_size: 4.8 * 1024 * 1024,
+        status: 'completed' as const,
+        created_at: '2024-12-12T14:30:00Z',
+        organization_id: 'demo-org',
+        entity_id: 'entity-2',
+        entity_name: 'ACME Client',
+        entity_type: 'client',
+        // Legacy fields for backward compatibility
         name: 'Broker Proposal Comparison.xlsx',
         size: 4.8 * 1024 * 1024,
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         uploadDate: '2024-12-12',
         modifiedDate: '2024-12-12',
         version: 'v1.1',
-        status: 'active',
         tags: ['Broker', 'Proposal'],
         category: 'Proposals'
       },
       {
         id: '3',
+        filename: 'General Liability Certificate.pdf',
+        file_type: 'application/pdf',
+        file_size: 1.8 * 1024 * 1024,
+        status: 'completed' as const,
+        created_at: '2024-12-11T09:15:00Z',
+        organization_id: 'demo-org',
+        // Legacy fields for backward compatibility
         name: 'General Liability Certificate.pdf',
         size: 1.8 * 1024 * 1024,
         type: 'application/pdf',
         uploadDate: '2024-12-11',
         modifiedDate: '2024-12-11',
         version: 'v2.1',
-        status: 'active',
         tags: ['Certificate', 'Liability'],
         category: 'Certificates'
       },
       {
         id: '4',
+        filename: '2024 Claims Summary Report.docx',
+        file_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        file_size: 856 * 1024,
+        status: 'completed' as const,
+        created_at: '2024-12-07T16:45:00Z',
+        organization_id: 'demo-org',
+        // Legacy fields for backward compatibility
         name: '2024 Claims Summary Report.docx',
         size: 856 * 1024,
         type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         uploadDate: '2024-12-07',
         modifiedDate: '2024-12-07',
         version: 'v1.0',
-        status: 'active',
         tags: ['Claims', 'Report'],
         category: 'Reports'
       }

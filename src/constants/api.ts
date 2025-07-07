@@ -8,33 +8,31 @@ export const API_ENDPOINTS = {
   DOCUMENT_UPLOAD: '/api/documents/upload',
   DOCUMENT_DELETE: (id: string) => `/api/documents/${id}`,
   DOCUMENT_DOWNLOAD: (id: string) => `/api/documents/${id}/download`,
+  DOCUMENT_STATUS: (id: string) => `/api/documents/${id}/status`,
+  DOCUMENT_DATA: (id: string) => `/api/documents/${id}/data`,
+  DOCUMENT_REPROCESS: (id: string) => `/api/documents/${id}/reprocess`,
+  DOCUMENT_UPDATE_ENTITY: (id: string) => `/api/documents/${id}/entity`,
   
-  // Celery job status for OCR processing
-  JOB_STATUS: (jobId: string) => `/api/jobs/${jobId}/status`,
+  // Entity management
+  ENTITIES: '/api/entities',
   
-  // AWS S3 direct upload (if implemented)
-  PRESIGNED_URL: '/api/documents/presigned-url',
+  // Dashboard and analytics
+  DASHBOARD_STATS: '/api/dashboard/stats',
+  ANALYTICS_PREMIUM: (entityId: string) => `/api/analytics/premium-summary/${entityId}`,
+  ANALYTICS_OVERVIEW: '/api/analytics/organization-premium-overview',
 } as const;
 
-// File validation constants
+// File validation constants (matching PolicyStack backend)
 export const FILE_VALIDATION = {
-  MAX_FILE_SIZE: 50 * 1024 * 1024, // 50MB
+  MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB (matching backend limit)
   ALLOWED_TYPES: [
     'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-powerpoint',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    'application/zip',
+    'text/plain',
     'image/jpeg',
     'image/png',
-    'image/gif',
-    'image/bmp',
-    'image/webp'
+    'image/tiff'
   ],
-  ALLOWED_EXTENSIONS: ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+  ALLOWED_EXTENSIONS: ['.pdf', '.txt', '.jpg', '.jpeg', '.png', '.tiff']
 } as const;
 
 // Upload progress polling interval

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   FileText,
@@ -8,8 +9,12 @@ import {
   HelpCircle,
   Menu,
   X,
-  Home
+  Home,
+  User,
+  LogOut,
+  ChevronDown
 } from 'lucide-react';
+import { useAuthContext } from '../contexts/AuthContext';
 
 interface NavigationItem {
   id: string;
@@ -23,9 +28,7 @@ interface NavigationItem {
 interface LayoutProps {
   children: React.ReactNode;
   navigationItems?: NavigationItem[];
-  currentPath?: string;
   brandName?: string;
-  onNavigate?: (path: string) => void;
 }
 
 const defaultNavigationItems: NavigationItem[] = [
@@ -72,23 +75,42 @@ const defaultNavigationItems: NavigationItem[] = [
 const Layout: React.FC<LayoutProps> = ({
   children,
   navigationItems = defaultNavigationItems,
-  currentPath = '',
   brandName = 'HEADNUGGET',
-  onNavigate
 }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user, logout } = useAuthContext();
+  
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleNavigate = (path: string) => {
-    if (onNavigate) {
-      onNavigate(path);
-    } else {
-      console.log(`Navigation to: ${path}`);
-    }
+    navigate(path);
     setIsMobileMenuOpen(false);
   };
 
+  const handleLogout = () => {
+    logout();
+    setIsUserMenuOpen(false);
+  };
+
   const isActive = (itemPath: string) => {
-    return currentPath === itemPath || currentPath.startsWith(itemPath + '/');
+    return location.pathname === itemPath || location.pathname.startsWith(itemPath + '/');
   };
 
   const NavigationContent = () => (
@@ -105,6 +127,48 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
         </div>
       </div>
+
+      {/* User Profile Section */}
+      {user && (
+        <div className="p-4 border-b border-amber-800/20">
+          <div className="relative" ref={userMenuRef}>
+            <button
+              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+              className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-amber-100 hover:bg-amber-800/20 hover:text-white transition-colors"
+            >
+              <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+                <User className="w-4 h-4 text-amber-800" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="text-sm font-medium truncate">{user.full_name}</p>
+                <p className="text-xs text-amber-200 truncate">{user.email}</p>
+              </div>
+              <ChevronDown className={`w-4 h-4 transition-transform ${isUserMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* User Menu Dropdown */}
+            {isUserMenuOpen && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                <button
+                  onClick={() => handleNavigate('/settings')}
+                  className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  <Settings className="w-4 h-4" />
+                  <span>Settings</span>
+                </button>
+                <div className="border-t border-gray-100 my-1"></div>
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center space-x-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Sign out</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Navigation Items */}
       <nav className="flex-1 p-4" role="navigation" aria-label="Main navigation">
